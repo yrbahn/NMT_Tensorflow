@@ -69,9 +69,9 @@ class ParallelDataProvider(data_provider.DataProvider):
             items2 = dataset2.decoder.list_items()
             tensors2 = dataset2.decoder.decode(data_target, items2)
 
-        # Merge items and results
-        items = items + items2
-        tensors = tensors + tensors2
+            # Merge items and results
+            items = items + items2
+            tensors = tensors + tensors2
 
         super(ParallelDataProvider, self).__init__(
             items_to_tensors=dict(zip(items, tensors)),

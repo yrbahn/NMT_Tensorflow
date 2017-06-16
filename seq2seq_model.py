@@ -36,20 +36,25 @@ class Seq2Seq(object):
                          source_tokens=None,
                          source_tokens_len=None,
                          target_tokens=None,
-                         target_tokens_len=None):
+                         target_tokens_len=None, 
+                         mode=tf.contrib.learn.ModeKeys.TRAIN):
         
         #assign placeholder variables
         self.source_tokens     = tf.placeholder_with_default(source_tokens, shape=[None,None], name='source_tokens')
         self.source_tokens_len = tf.placeholder_with_default(source_tokens_len, shape=[None], name='source_tokens_len')
-        self.target_tokens     = tf.placeholder_with_default(target_tokens, shape=[None, None], name='target_tokens')
-        self.target_tokens_len = tf.placeholder_with_default(target_tokens_len, shape=[None], name='target_tokens_len')
 
+        if mode != tf.contrib.learn.ModeKeys.INFER:
+            self.target_tokens     = tf.placeholder_with_default(target_tokens, shape=[None, None], name='target_tokens')
+            self.target_tokens_len = tf.placeholder_with_default(target_tokens_len, shape=[None], name='target_tokens_len')
+        else:
+            self.target_tokens = None
+   
         #rl enable var
         print(self.params.rl_training)
         self.rl_training   = tf.placeholder_with_default(self.params.rl_training, shape=None, name="rl_training") 
         
     # set variables for inputs and targets
-    def _set_variables(self):
+    def _set_variables(self, mode):
         source_vocab_to_id, source_id_to_vocab, source_word_to_count, source_vocab_size = \
             vocab.create_vocabulary_lookup_table(self.params.source_vocab_path) #"./data/vocab_en.txt")
         target_vocab_to_id, self.target_id_to_vocab, target_word_to_count, target_vocab_size = \
@@ -63,7 +68,7 @@ class Seq2Seq(object):
         self.input_ids = source_vocab_to_id.lookup(self.source_tokens[:,:self.params.max_source_len])
         self.inputs_len = tf.minimum(self.source_tokens_len, self.params.max_source_len)
 
-        if self.target_tokens != None:
+        if mode != tf.contrib.learn.ModeKeys.INFER:
             self.target_ids = target_vocab_to_id.lookup(self.target_tokens[:,:self.params.max_target_len])
             self.targets_len = tf.minimum(self.target_tokens_len, self.params.max_target_len)
                
@@ -201,28 +206,45 @@ class Seq2Seq(object):
     # inference layer
     def _add_inference_layer(self, mode):
         # inference layer
-        sequence_start = [self.target_bos_id]
-        start_tokens = tf.tile(sequence_start, [self.batch_size], name='start_tokens')
+        
+        if not self.params.beam_search:
+            inference_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
+                embedding=self.dec_W_emb,
+                start_tokens=tf.fill([self.batch_size], self.target_bos_id),
+                end_token=self.target_eos_id) 
 
-        inference_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
-            embedding=self.dec_W_emb,
-            start_tokens=start_tokens,
-            end_token=self.target_eos_id) 
+            inference_decoder = tf.contrib.seq2seq.BasicDecoder(
+                cell=self.dec_cell,
+                helper=inference_helper,
+                initial_state=self.initial_state,
+                output_layer=self.output_layer)
 
-        inference_decoder = tf.contrib.seq2seq.BasicDecoder(
-            cell=self.dec_cell,
-            helper=inference_helper,
-            initial_state=self.initial_state,
-            output_layer=self.output_layer)
+            inference_outputs, _ = tf.contrib.seq2seq.dynamic_decode(
+                inference_decoder,
+                output_time_major=False,
+                impute_finished=True,
+                maximum_iterations=self.max_target_len)
 
-        inference_outputs, _ = tf.contrib.seq2seq.dynamic_decode(
-            inference_decoder,
-            output_time_major=False,
-            impute_finished=True,
-            maximum_iterations=self.max_target_len)
+            predictions = inference_outputs.sample_id
+        else: # tensorflow 1.2 only(no test)
+            bs_decoder = tf.contrib.seq2seq.BeamSearchDecoder(
+                cell=cell,
+                embedding=self.dec_W_emb,
+                start_tokens=tf.fill([self.batch_size], self.target_bos_id),
+                end_token=self.target_eos_id,
+                initial_state=self.initial_state,
+                beam_width=self.params.beam_width,
+                output_layer=self.output_layer,
+                length_penalty_weight=self.params.length_penalty_weight)
             
-        predictions = inference_outputs.sample_id
-
+            inference_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(
+                bs_decoder,
+                output_time_major=False,
+                maximum_iterations=self.max_target_len)
+            
+            #max_sequence_length = 
+            predictions = inference_outputs.predicted_ids[:,:,0]
+                
         loss = None
         if mode == tf.contrib.learn.ModeKeys.EVAL:# EVAL
             self.max_target_len = tf.shape(predictions)[1]
@@ -387,10 +409,11 @@ class Seq2Seq(object):
 
             # add placeholders
             self._add_placeholders(source_tokens, source_tokens_length,
-                                   target_tokens, target_tokens_length)
+                                   target_tokens, target_tokens_length,
+                                   mode)
 
             # set input_ids, target_ids, max_target_len
-            self._set_variables()
+            self._set_variables(mode)
            
             # add an encoder to computation graph
             self._add_encoder()

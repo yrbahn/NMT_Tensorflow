@@ -1,5 +1,4 @@
 import tensorflow as tf
-from collections import namedtuple
 from tensorflow.contrib.learn.python.learn import learn_runner
 from tensorflow.contrib.learn.python.learn.estimators import run_config
 
@@ -9,6 +8,9 @@ from text_metric_specs import bleu_fn
 
 import tempfile
 import vocab
+import params
+import dill
+import os
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -41,6 +43,10 @@ tf.flags.DEFINE_integer("hidden_size", 256, """LSTM hidden size""")
 tf.flags.DEFINE_integer("max_source_len", 40, "source input length""")
 tf.flags.DEFINE_integer("max_target_len", 40, "target input length""")
 tf.flags.DEFINE_float("learning_rate", 0.001, "learning rate")    
+tf.flags.DEFINE_boolean("beam_search", False, "beam search enable")
+tf.flags.DEFINE_integer("beam_width", 5, "beam search wdith size")
+tf.flags.DEFINE_float("length_penalty_weight", 0.0, "length_penalty_weight")
+
 
 # Training parameters
 tf.flags.DEFINE_string("schedule", "train",
@@ -82,27 +88,6 @@ tf.flags.DEFINE_boolean("log_device_placement", False,
 
 FLAGS = tf.flags.FLAGS
 
-# params
-HParams = namedtuple(
-  "HParams",
-  [ "cell",
-    "batch_size",
-    "layers",
-    "attention",
-    "source_vocab_path",
-    "target_vocab_path",
-    "rl_training",  
-    "enc_embedding_dim",
-    "dec_embedding_dim",
-    "hidden_size",
-    "attn_size",
-    "eval_batch_size",
-    "learning_rate",
-    "max_source_len",
-    "max_target_len",
-    "optimizer",
-    "optimizer_clip_gradients"])
-
 # create params
 def create_hparams():
     if FLAGS.cell_model == "LSTM":
@@ -110,7 +95,7 @@ def create_hparams():
     else:
         cell_model = tf.contrib.rnn.GRUCell
         
-    return HParams(
+    return params.HParams(
         cell=cell_model,
         batch_size=FLAGS.batch_size,
         rl_training=FLAGS.rl_training,
@@ -125,10 +110,17 @@ def create_hparams():
         enc_embedding_dim=FLAGS.embedding_dim,
         dec_embedding_dim=FLAGS.embedding_dim,
         hidden_size=FLAGS.hidden_size,
+        length_penalty_weight=FLAGS.length_penalty_weight,
+        beam_search=FLAGS.beam_search,
+        beam_width=FLAGS.beam_width,
         attn_size=FLAGS.hidden_size,
         max_source_len=FLAGS.max_source_len,
         max_target_len=FLAGS.max_target_len)
 
+def pickle_params(params):
+    with open(os.path.join(FLAGS.output_dir, "params.dill"), 'bw') as mdf:
+        dill.dump(params, mdf)
+ 
 def create_experiment(output_dir):
     config = run_config.RunConfig(
         tf_random_seed=FLAGS.tf_random_seed,
@@ -143,6 +135,8 @@ def create_experiment(output_dir):
     #params
     hparams = create_hparams()
     #print(hparams)
+   
+    pickle_params(hparams)
 
     #Create train input function
     train_input_fn = create_input_fn(source_file_list=FLAGS.source_files,
@@ -206,7 +200,7 @@ def main(_argv):
         
     if not FLAGS.output_dir:
         FLAGS.output_dir = tempfile.mkdtemp()
-    
+   
     if not FLAGS.source_files or not FLAGS.target_files:
         raise ValueError("You must specify source_path and target_path")
 

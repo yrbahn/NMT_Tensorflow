@@ -9,13 +9,14 @@ def create_input_fn(source_file_list,
                     batch_size,
                     bucket_boundaries=None,
                     allow_smaller_final_batch=False,
+                    suffle=True,
                     scope=None):
     def input_fn():
         with tf.variable_scope(scope or "input_fn"):
             data_provider = make_parallel_data_provider(data_sources_source=source_file_list,
                                                         data_sources_target=target_file_list,
                                                         #num_epochs=num_epochs,
-                                                        shuffle=True)
+                                                        shuffle=suffle)
             
             #data_provider.get(item_list) => tensor_list 
             #data_provider.list_items() => 아이템 이름 리스트

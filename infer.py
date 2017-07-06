@@ -53,6 +53,7 @@ def main(_argv):
                                            params=hparams, model_dir=FLAGS.model_dir) 
 
     for preds in estimator.predict(input_fn=predict_input_fn):
+        print(utils.to_sent_string(preds['source_tokens'].tolist()))
         print(utils.to_sent_string(preds['predictions'].tolist()))
 
 if __name__ == "__main__":

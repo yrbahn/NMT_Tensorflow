@@ -1,1 +1,14 @@
-python train.py --source_vocab_path=data/vocab_en.txt --target_vocab_path=data/vocab_kr.txt --source_files=data/kaist_corpus_bpe.en --target_files=data/kaist_corpus_bpe.kr --dev_source_files=data/kaist_dev_bpe.en --dev_target_files=data/kaist_dev_bpe.kr --output_dir=./model_1
+python train.py --source_vocab_path=data2/wp_en.vocab \
+  --target_vocab_path=data2/wp_kr.vocab \
+  --source_files=data2/merge.uniq.shuffle.wp.en \
+  --target_files=data2/merge.uniq.shuffle.wp.kr \
+  --dev_source_files=data2/golden.wp.en.500 \
+  --dev_target_files=data2/golden.wp.kr.500 \
+  --schedule=continuous_train_and_eval \
+  --eval_steps=10 \
+  --num_layers=4 \
+  --attention=True \
+  --batch_size=512 \
+  --eval_batch_size=100 \
+  --eval_every_n_steps=10000 \
+  --output_dir=./model_test4

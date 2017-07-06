@@ -30,32 +30,34 @@ tf.flags.DEFINE_string("output_dir", None,
                        to. If None, a local temporary directory is created.""")
 
 tf.flags.DEFINE_string("optimizer", "Adam", "optimizer")
-tf.flags.DEFINE_float("optimizer_clip_gradients", 10.0, "clip_normal")
+tf.flags.DEFINE_float("optimizer_clip_gradients", 5.0, "clip_normal")
 tf.flags.DEFINE_boolean("rl_training", False, "enable RL training")
-tf.flags.DEFINE_string("cell_model", "LSTM", "cell model")
+tf.flags.DEFINE_string("cell_model", "GRU", "cell model")
 tf.flags.DEFINE_integer("num_layers", 1, """number of layers""")
 tf.flags.DEFINE_boolean("attention", False, """enable attention""")
 tf.flags.DEFINE_string("source_vocab_path", None, """source vocab path""")
 tf.flags.DEFINE_string("target_vocab_path", None, """target vocab path""")
 tf.flags.DEFINE_integer("eval_batch_size", 1, """evaluation batch size""")
-tf.flags.DEFINE_integer("embedding_dim", 64, """embedding dimension""")
-tf.flags.DEFINE_integer("hidden_size", 256, """LSTM hidden size""")
-tf.flags.DEFINE_integer("max_source_len", 40, "source input length""")
-tf.flags.DEFINE_integer("max_target_len", 40, "target input length""")
+tf.flags.DEFINE_integer("embedding_dim", 512, """embedding dimension""")
+tf.flags.DEFINE_integer("hidden_size", 512, """LSTM hidden size""")
+tf.flags.DEFINE_integer("max_source_len", 50, "source input length""")
+tf.flags.DEFINE_integer("max_target_len", 50, "target input length""")
 tf.flags.DEFINE_float("learning_rate", 0.001, "learning rate")    
 tf.flags.DEFINE_boolean("beam_search", False, "beam search enable")
 tf.flags.DEFINE_integer("beam_width", 5, "beam search wdith size")
 tf.flags.DEFINE_float("length_penalty_weight", 0.0, "length_penalty_weight")
+tf.flags.DEFINE_float("output_keep_prob", 0.5, "output_keep_prob")
 
 
 # Training parameters
-tf.flags.DEFINE_string("schedule", "train",
+tf.flags.DEFINE_string("schedule", "continuous_train_and_eval",
                        """Estimator function to call, defaults to
                        continuous_train_and_eval for local run""")
 tf.flags.DEFINE_integer("train_steps", None,
                         """Maximum number of training steps to run.
                          If None, train forever.""")
-tf.flags.DEFINE_integer("eval_every_n_steps", 1000,
+tf.flags.DEFINE_integer("eval_steps", 100, "eval step")
+tf.flags.DEFINE_integer("eval_every_n_steps", 5000,
                         "Run evaluation on validation data every N steps.")
 
 # RunConfig Flags
@@ -94,7 +96,7 @@ def create_hparams():
         cell_model = tf.contrib.rnn.LSTMCell
     else:
         cell_model = tf.contrib.rnn.GRUCell
-        
+    print("learning_rate:", FLAGS.learning_rate) 
     return params.HParams(
         cell=cell_model,
         batch_size=FLAGS.batch_size,
@@ -103,6 +105,7 @@ def create_hparams():
         target_vocab_path=FLAGS.target_vocab_path,
         layers=FLAGS.num_layers,
         eval_batch_size=FLAGS.eval_batch_size,
+        output_keep_prob=FLAGS.output_keep_prob,
         attention=FLAGS.attention,
         optimizer=FLAGS.optimizer,
         optimizer_clip_gradients=FLAGS.optimizer_clip_gradients, #10.0,
@@ -120,7 +123,7 @@ def create_hparams():
 def pickle_params(params):
     with open(os.path.join(FLAGS.output_dir, "params.dill"), 'bw') as mdf:
         dill.dump(params, mdf)
- 
+    
 def create_experiment(output_dir):
     config = run_config.RunConfig(
         tf_random_seed=FLAGS.tf_random_seed,
@@ -146,7 +149,8 @@ def create_experiment(output_dir):
     
     eval_input_fn = create_input_fn(source_file_list=FLAGS.dev_source_files,
                                     target_file_list=FLAGS.dev_target_files,
-                                    batch_size=FLAGS.batch_size,
+                                    batch_size=FLAGS.eval_batch_size,
+                                    suffle=False,
                                     scope="dev_input_fn")
     
     #vocab info 
@@ -183,7 +187,7 @@ def create_experiment(output_dir):
         eval_input_fn=eval_input_fn,
         min_eval_frequency=FLAGS.eval_every_n_steps,
         train_steps=FLAGS.train_steps,
-        eval_steps=None,
+        eval_steps=FLAGS.eval_steps,
         eval_metrics=eval_metrics,
         train_monitors=train_hooks)
    

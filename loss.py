@@ -27,14 +27,14 @@ def rl_loss(logits, targets, advantage, weights, name=None):
             logprobs = tf.reshape(logprobs, [batch_size, sequence_length])
 
             #J = -logprobs * advantage[:, None] 
-            advantage = tf_print(advantage, "advantage:")
-            losses = -tf.reduce_sum(logprobs*weights, 1) * advantage
+            #advantage = tf_print(advantage, "advantage:")
+            losses = -tf.reduce_sum(logprobs*weights, [1]) * advantage
             #losses = tf_print(losses, "losses:")
 
             #regularize with entropy            
             probs = tf.reshape(probs, [batch_size, sequence_length])
             entropy = -probs * logprobs 
-            entropy = tf.reduce_sum(entropy*weights)
+            entropy = tf.reduce_sum(entropy*weights, [1])
             #entropy /= total_size
             
             losses = losses - 0.01*entropy
